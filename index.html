@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Card Maker (Front & Back) - Text Size Control</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; background: #f0f0f0; margin: 0; }
+        .main-container { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        
+        .preview-area { display: flex; gap: 20px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
+        .card-unit { display: flex; flex-direction: column; align-items: center; }
+        .card-label { font-weight: bold; margin-bottom: 8px; color: #444; font-size: 0.9rem;}
+
+        .canvas-bg {
+            line-height: 0;
+            background-image: linear-gradient(45deg, #eee 25%, transparent 25%), 
+                              linear-gradient(-45deg, #eee 25%, transparent 25%),
+                              linear-gradient(45deg, transparent 75%, #eee 75%),
+                              linear-gradient(-45deg, transparent 75%, #eee 75%);
+            background-size: 10px 10px;
+            border: 1px solid #ccc;
+        }
+
+        .editor-area { display: flex; gap: 30px; justify-content: center; border-top: 1px solid #eee; padding-top: 20px; }
+        .controls { display: flex; flex-direction: column; gap: 10px; width: 243px; }
+        
+        h4 { margin: 0 0 10px 0; font-size: 0.9rem; color: #666; border-left: 4px solid #007AFF; padding-left: 8px; }
+        .input-group { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .input-group label { font-size: 0.75rem; color: #888; white-space: nowrap; }
+        
+        input[type="text"], textarea { padding: 8px; border-radius: 4px; border: 1px solid #ddd; width: 100%; box-sizing: border-box; font-size: 0.9rem; }
+        textarea { resize: vertical; min-height: 80px; }
+        input[type="color"] { width: 40px; height: 30px; cursor: pointer; border: 1px solid #ddd; padding: 2px; }
+        input[type="range"] { flex-grow: 1; }
+        
+        .btn-stack { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; width: 100%; }
+        button { border: none; cursor: pointer; font-weight: bold; padding: 10px; border-radius: 4px; color: white; transition: 0.2s; width: 100%; }
+        .download-front { background: #007AFF; }
+        .download-back { background: #28a745; }
+        button:hover { opacity: 0.8; }
+    </style>
+</head>
+<body>
+
+<div class="container-wrapper">
+<div class="main-container">
+    <div class="preview-area">
+        <!-- 表面プレビュー -->
+        <div class="card-unit">
+            <span class="card-label">表面 (枠線なし)</span>
+            <div class="canvas-bg"><canvas id="canvasFront" width="243" height="153"></canvas></div>
+            <div class="btn-stack">
+                <button class="download-front" id="dlFront">表面をダウンロード</button>
+            </div>
+        </div>
+
+        <!-- 裏面プレビュー -->
+        <div class="card-unit">
+            <span class="card-label">裏面 (枠線あり)</span>
+            <div class="canvas-bg"><canvas id="canvasBack" width="243" height="153"></canvas></div>
+            <div class="btn-stack">
+                <button class="download-back" id="dlBack">裏面をダウンロード</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="editor-area">
+        <!-- 表面設定 -->
+        <div class="controls">
+            <h4>表面設定</h4>
+            <input type="text" id="frontTitle" placeholder="タイトル" value="Card Title">
+            <textarea id="frontBody" placeholder="本文（改行できます）">Line 1&#13;Line 2&#13;Line 3</textarea>
+            <div class="input-group">
+                <label>文字色</label>
+                <input type="color" id="frontTextColor" value="#333333">
+            </div>
+            <div class="input-group">
+                <label>背景色</label>
+                <input type="color" id="frontBgColor" value="#ffffff">
+            </div>
+        </div>
+
+        <!-- 裏面設定 -->
+        <div class="controls">
+            <h4>裏面・共通設定</h4>
+            <input type="text" id="backText" placeholder="裏面の文字" value="Back Side">
+            
+            <div class="input-group">
+                <label>文字サイズ (<span id="textSizeDisplay">20</span>px)</label>
+                <input type="range" id="backTextSize" min="10" max="80" value="20">
+            </div>
+
+            <div class="input-group">
+                <label>裏面文字色</label>
+                <input type="color" id="backTextColor" value="#ffffff">
+            </div>
+            <div class="input-group">
+                <label>裏面背景</label>
+                <input type="color" id="backBgColor" value="#006fd6">
+            </div>
+            <div class="input-group">
+                <label>枠線色(裏面のみ)</label>
+                <input type="color" id="borderColor" value="#cb6715">
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<script>
+    const RADIUS = 10;
+    const BORDER_WIDTH = 5;
+
+    const cFront = document.getElementById('canvasFront');
+    const cBack = document.getElementById('canvasBack');
+    const ctxF = cFront.getContext('2d');
+    const ctxB = cBack.getContext('2d');
+
+    const inputs = [
+        'frontTitle', 'frontBody', 'frontTextColor', 'frontBgColor',
+        'backText', 'backTextColor', 'backBgColor', 'borderColor', 'backTextSize'
+    ].map(id => document.getElementById(id));
+
+    const textSizeDisplay = document.getElementById('textSizeDisplay');
+
+    function drawRoundedRect(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+    }
+
+    function render() {
+        const w = 243;
+        const h = 153;
+
+        // 数値表示の更新
+        const bSize = document.getElementById('backTextSize').value;
+        textSizeDisplay.textContent = bSize;
+
+        // --- 表面の描画 ---
+        ctxF.clearRect(0, 0, w, h);
+        ctxF.save();
+        drawRoundedRect(ctxF, 0, 0, w, h, RADIUS);
+        ctxF.clip();
+        
+        ctxF.fillStyle = document.getElementById('frontBgColor').value;
+        ctxF.fillRect(0, 0, w, h);
+        ctxF.fillStyle = document.getElementById('frontTextColor').value;
+        ctxF.textAlign = "center";
+        
+        ctxF.font = "bold 16px sans-serif";
+        ctxF.fillText(document.getElementById('frontTitle').value, w / 2, 30);
+
+        ctxF.font = "13px sans-serif";
+        const lines = document.getElementById('frontBody').value.split('\n');
+        const lineHeight = 18;
+        const startY = 55;
+        lines.forEach((line, i) => {
+            ctxF.fillText(line, w / 2, startY + (i * lineHeight));
+        });
+        ctxF.restore();
+
+        // --- 裏面の描画 ---
+        ctxB.clearRect(0, 0, w, h);
+        ctxB.save();
+        drawRoundedRect(ctxB, 0, 0, w, h, RADIUS);
+        ctxB.clip();
+        
+        ctxB.fillStyle = document.getElementById('backBgColor').value;
+        ctxB.fillRect(0, 0, w, h);
+
+        ctxB.fillStyle = document.getElementById('backTextColor').value;
+        // 指定されたピクセル数で描画
+        ctxB.font = `bold ${bSize}px sans-serif`;
+        ctxB.textAlign = "center";
+        ctxB.textBaseline = "middle";
+        ctxB.fillText(document.getElementById('backText').value, w / 2, h / 2);
+
+        const inset = BORDER_WIDTH / 2;
+        ctxB.strokeStyle = document.getElementById('borderColor').value;
+        ctxB.lineWidth = BORDER_WIDTH;
+        drawRoundedRect(ctxB, inset, inset, w - BORDER_WIDTH, h - BORDER_WIDTH, RADIUS - inset);
+        ctxB.stroke();
+        
+        ctxB.restore();
+    }
+
+    inputs.forEach(el => el.addEventListener('input', render));
+
+    document.getElementById('dlFront').onclick = () => {
+        const link = document.createElement('a');
+        link.download = 'card-front.png';
+        link.href = cFront.toDataURL();
+        link.click();
+    };
+    document.getElementById('dlBack').onclick = () => {
+        const link = document.createElement('a');
+        link.download = 'card-back.png';
+        link.href = cBack.toDataURL();
+        link.click();
+    };
+
+    render();
+</script>
+
+</body>
+</html>
